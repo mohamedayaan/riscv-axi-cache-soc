@@ -97,16 +97,6 @@ module cache_arbiter (
                 end
                 
                 I_BUSY: begin
-                    // FIX: single-beat transfers (writes, lat_burst_len==0)
-                    // NEVER assert cache_last in the responder - only
-                    // multi-beat read bursts do. The original condition
-                    // `cache_last && cache_ack` is correct for bursts but
-                    // is NEVER satisfied for a single-beat write, so the
-                    // arbiter got permanently stuck in I_BUSY/D_BUSY after
-                    // any write, never returning to IDLE. That left
-                    // i_grant/d_grant stuck high and the mock memory model
-                    // free-running on stale cache_req forever, starving
-                    // every later request.
                     if (cache_ack && (cache_last || lat_burst_len == 8'h0))
                         state <= IDLE;
                 end
@@ -121,32 +111,7 @@ module cache_arbiter (
         end
     end
     
-    // ------------------------------------------------------------------
-    // Outputs to AXI master.
-    //
-    // FIX: cache_req (and the rest of the cache_* bus) is now driven
-    // ONLY from the registered busy states (I_BUSY/D_BUSY via lat_*),
-    // never combinationally while still in IDLE.
-    //
-    // Why: previously, in IDLE, this block drove cache_req = i_req/d_req
-    // combinationally in the SAME cycle a request first appeared - i.e.
-    // one cycle BEFORE the FSM register above actually transitions to
-    // I_BUSY/D_BUSY (and before i_grant/d_grant assert, since those are
-    // assign'd off `state`). The mock memory model responds to
-    // `cache_req && !resp_active` combinationally too, so it could start
-    // counting/returning the first burst beat on that early IDLE cycle -
-    // a cycle where i_ack/d_ack are still forced to 0 by the
-    // `(state == I_BUSY/D_BUSY) ? cache_ack : 0` gating below (state is
-    // still IDLE then). That first beat was silently dropped, and
-    // i_cache/d_cache ended up capturing beats 1..7 (plus a repeat/garbage
-    // beat at the end) shifted into line_buffer[0..7], corrupting the
-    // whole refilled line by one beat.
-    //
-    // By only asserting cache_req from the registered I_BUSY/D_BUSY state,
-    // cache_req, i_grant/d_grant, and the responder's first real beat all
-    // line up on the same, single, unambiguous cycle. Costs one extra
-    // idle cycle of arbitration latency per request, which is negligible.
-    // ------------------------------------------------------------------
+  
     always @(*) begin
         if ((state == I_BUSY || state == D_BUSY) &&
             !(cache_ack && (cache_last || lat_burst_len == 8'h0))) begin
