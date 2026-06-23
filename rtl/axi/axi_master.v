@@ -6,6 +6,7 @@ module axi_master (
     input  wire        cache_wen,
     input  wire        cache_req,
     input  wire [7:0]  cache_burst_len,
+    input  wire [3:0]  cache_wstrb,
     output reg  [31:0] cache_rdata,
     output reg         cache_ack,
     output reg         cache_last,
@@ -60,8 +61,8 @@ always @(posedge clk or negedge rst_n) begin
                 end else if (cache_req && cache_wen) begin
                     m_awid<=4'd0; m_awaddr<=cache_addr; m_awlen<=8'd0;
                     m_awsize<=3'b010; m_awburst<=2'b01; m_awvalid<=1;
-                    m_wdata<=cache_wdata; m_wstrb<=4'b1111; m_wvalid<=1; m_wlast<=1;
-                    state<=AW;
+                    m_wdata<=cache_wdata; m_wstrb<=cache_wstrb;
+                    m_wvalid<=1; m_wlast<=1; state<=AW;
                 end
             end
             AR: if(m_arready) begin m_arvalid<=0; state<=RD; end
